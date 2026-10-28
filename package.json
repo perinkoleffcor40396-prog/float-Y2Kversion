@@ -48,7 +48,8 @@
     "three": "^0.183.2",
     "undici": "^7.26.0",
     "web-push": "^3.6.7",
-    "html-to-image": "^1.11.13"
+    "html-to-image": "^1.11.13",
+    "opencc-js": "1.4.2"
   },
   "devDependencies": {
     "@gltf-transform/core": "^4.3.0",
