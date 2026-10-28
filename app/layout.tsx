@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
 import { IdentityRuntimeBootstrap } from "@/components/identity-runtime-bootstrap";
+import { HongKongTraditionalDisplay } from "@/components/hong-kong-traditional-display";
 import { PWAManifestInjector } from "@/components/pwa-manifest-injector";
 import { PWARegistrar } from "@/components/pwa-registrar";
 import "../styles/fonts.css";
@@ -41,6 +42,7 @@ export default function RootLayout({
         <PWAManifestInjector />
         <PWARegistrar />
         <IdentityRuntimeBootstrap />
+        <HongKongTraditionalDisplay />
         {children}
       </body>
     </html>
