@@ -5,7 +5,7 @@ import OpenCC from "opencc-js";
 
 const convertToHongKongTraditional = OpenCC.Converter({ from: "cn", to: "hkp" });
 const SKIP_SELECTOR =
-  "script, style, noscript, textarea, input, select, option, [contenteditable='true'], [data-no-opencc], .ignore-opencc";
+  "script, style, noscript, textarea, input, select, option, pre, code, svg, math, [contenteditable='true'], [data-no-opencc], .ignore-opencc";
 const CONVERTIBLE_ATTRIBUTES = ["placeholder", "title", "aria-label", "alt"];
 
 function shouldSkipElement(element: Element | null): boolean {
