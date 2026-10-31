@@ -431,26 +431,26 @@ export async function parseEpubFile(arrayBuffer: ArrayBuffer, fileName?: string)
 
 /** Extract readable text from HTML/XHTML content. */
 function extractTextFromHtml(html: string): { title: string; paragraphs: string[] } {
-    // Try to extract title from <title> or <h1>-<h3>
-    const titleMatch = html.match(/<h[1-3][^>]*>([\s\S]*?)<\/h[1-3]>/i)
-        || html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    const title = titleMatch ? stripHtmlTags(titleMatch[1]).trim() : "";
+    // Parse as HTML so nested block elements do not confuse a cross-tag regex.
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    const titleNode = parsed.querySelector("h1, h2, h3, title");
+    const title = titleNode?.textContent?.trim() || "";
 
-    // Extract text from <p>, <div>, <li> tags
-    const paragraphs: string[] = [];
-    const blockPattern = /<(?:p|div|li)[^>]*>([\s\S]*?)<\/(?:p|div|li)>/gi;
-    let match;
-    while ((match = blockPattern.exec(html)) !== null) {
-        const text = stripHtmlTags(match[1]).trim();
-        if (text.length > 0) paragraphs.push(text);
-    }
+    // EPUB chapters normally use <p>. Read those first to avoid treating an
+    // enclosing <div> as one giant paragraph or duplicating nested text.
+    const paragraphNodes = Array.from(parsed.querySelectorAll("p"));
+    const blockNodes = paragraphNodes.length > 0
+        ? paragraphNodes
+        : Array.from(parsed.querySelectorAll("li, blockquote, div"));
+    const paragraphs = blockNodes
+        .map((node) => (node.textContent || "").replace(/\\s+/g, " ").trim())
+        .filter((text) => text.length > 0);
 
-    // Fallback: strip all tags and split by newlines
+    // Fallback for EPUBs that contain plain text without paragraph elements.
     if (paragraphs.length === 0) {
-        const plainText = stripHtmlTags(html).trim();
+        const plainText = (parsed.body?.textContent || parsed.documentElement.textContent || "").trim();
         if (plainText) {
-            const lines = plainText.split(/\n{2,}/).map(l => l.trim()).filter(l => l.length > 0);
-            paragraphs.push(...lines);
+            paragraphs.push(...plainText.split(/\\n{2,}/).map((line) => line.trim()).filter(Boolean));
         }
     }
 
