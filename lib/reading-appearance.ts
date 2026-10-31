@@ -2,6 +2,7 @@
 
 import { kvGet, kvSet, registerKvMigration } from "./kv-db";
 import { openIndexedDbAtLeast } from "./idb-open";
+import { identityIndexedDbFactory, identityDatabaseName } from "./identity-runtime";
 
 export type ReadingFontFamilyId = "system" | "song" | "serif" | "sans" | "custom";
 
@@ -86,11 +87,38 @@ export function saveReadingAppearance(appearance: ReadingAppearance): ReadingApp
 }
 
 async function openBackgroundDb(): Promise<IDBDatabase> {
-    // Open at >= 1: a backup restore may have bumped the stored version higher,
-    // and opening at a fixed lower version would throw a VersionError.
-    return openIndexedDbAtLeast(BG_DB_NAME, 1, (db) => {
-        if (!db.objectStoreNames.contains(BG_STORE_NAME)) db.createObjectStore(BG_STORE_NAME);
-    });
+    // A restored database can have a higher version but still be missing this
+    // store. In that case, explicitly upgrade the existing database schema.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        const db = await openIndexedDbAtLeast(BG_DB_NAME, 1, (upgradeDb) => {
+            if (!upgradeDb.objectStoreNames.contains(BG_STORE_NAME)) {
+                upgradeDb.createObjectStore(BG_STORE_NAME);
+            }
+        });
+        if (db.objectStoreNames.contains(BG_STORE_NAME)) return db;
+
+        const nextVersion = db.version + 1;
+        db.close();
+        try {
+            const repairedDb = await new Promise<IDBDatabase>((resolve, reject) => {
+                const request = identityIndexedDbFactory().open(identityDatabaseName(BG_DB_NAME), nextVersion);
+                request.onupgradeneeded = () => {
+                    if (!request.result.objectStoreNames.contains(BG_STORE_NAME)) {
+                        request.result.createObjectStore(BG_STORE_NAME);
+                    }
+                };
+                request.onsuccess = () => resolve(request.result);
+                request.onerror = () => reject(request.error);
+                request.onblocked = () => reject(request.error || new Error("阅读背景数据库升级被阻止"));
+            });
+            if (repairedDb.objectStoreNames.contains(BG_STORE_NAME)) return repairedDb;
+            repairedDb.close();
+        } catch (error) {
+            // Another tab may have upgraded the database first; reopen and check.
+            if (!(error instanceof DOMException) || error.name !== "VersionError") throw error;
+        }
+    }
+    throw new Error("阅读背景数据库缺少 assets 数据表，修复失败");
 }
 
 export async function saveReadingBackground(blob: Blob | null): Promise<void> {
