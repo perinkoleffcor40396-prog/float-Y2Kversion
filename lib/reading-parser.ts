@@ -368,9 +368,9 @@ export async function parseEpubFile(arrayBuffer: ArrayBuffer, fileName?: string)
     // 1. Find container.xml → rootfile path
     const containerXml = await zip.file("META-INF/container.xml")?.async("text");
     if (!containerXml) throw new Error("Invalid EPUB: missing container.xml");
-    const rootfileMatch = containerXml.match(/full-path="([^"]+)"/);
-    if (!rootfileMatch) throw new Error("Invalid EPUB: no rootfile");
-    const rootfilePath = rootfileMatch[1];
+    const rootfileTag = containerXml.match(/<rootfile\b[^>]*>/i)?.[0];
+    const rootfilePath = rootfileTag?.match(/\bfull-path\s*=\s*["']([^"']+)["']/i)?.[1];
+    if (!rootfilePath) throw new Error("Invalid EPUB: no rootfile");
     const rootDir = rootfilePath.includes("/") ? rootfilePath.substring(0, rootfilePath.lastIndexOf("/") + 1) : "";
 
     // 2. Parse OPF (package document)
@@ -396,12 +396,14 @@ export async function parseEpubFile(arrayBuffer: ArrayBuffer, fileName?: string)
 
     // 4. Build id → href map from manifest
     const idToHref = new Map<string, string>();
-    const manifestMatch = opfXml.match(/<manifest[^>]*>([\s\S]*?)<\/manifest>/i);
+    const manifestMatch = opfXml.match(/<manifest\b[^>]*>([\s\S]*?)<\/manifest>/i);
     if (manifestMatch) {
-        const itemPattern = /id="([^"]+)"[^>]*href="([^"]+)"/g;
-        let m;
-        while ((m = itemPattern.exec(manifestMatch[1])) !== null) {
-            idToHref.set(m[1], m[2]);
+        // XML attributes are unordered: href may appear before or after id.
+        const itemTags = manifestMatch[1].match(/<item\b[^>]*>/gi) || [];
+        for (const itemTag of itemTags) {
+            const id = itemTag.match(/\bid\s*=\s*["']([^"']+)["']/i)?.[1];
+            const href = itemTag.match(/\bhref\s*=\s*["']([^"']+)["']/i)?.[1];
+            if (id && href) idToHref.set(id, href);
         }
     }
 
